@@ -1,89 +1,86 @@
 require('dotenv').config();
 const puppeteer = require('puppeteer');
 const axios = require('axios');
-const { WebcastPushConnection } = require('tiktok-live-connector');
+const { TikTokLiveConnection } = require('tiktok-live-connector');
+const express = require('express');
 
-// ==========================================
-// НАЛАШТУВАННЯ АКАУНТІВ ANTIQUE LIFE
-// ==========================================
-const IG_TARGET_ACCOUNT = 'antique_life_shop'; 
-const TIKTOK_TARGET_ACCOUNT = 'antique_life_tiktok'; 
-const YOUTUBE_TARGET_ACCOUNT = 'AntiqueLifeChannel'; // Ваш handle (той, що з @)
-const SPRING_WEBHOOK_URL = 'https://ваша-апі-адреса.com/api/internal/stream/webhook';
+const app = express();
+const PORT = process.env.PORT || 10000;
 
-// ==========================================
-// 1. TIKTOK (Слухач через WebSockets)
-// ==========================================
+app.get('/', (req, res) => {
+    res.send('Antique Life Scraper Bot is alive and running!');
+});
+
+const IG_TARGET_ACCOUNT = process.env.IG_TARGET_ACCOUNT;
+const TIKTOK_TARGET_ACCOUNT = process.env.TIKTOK_TARGET_ACCOUNT;
+const YOUTUBE_TARGET_ACCOUNT = process.env.YOUTUBE_TARGET_ACCOUNT;
+const SPRING_WEBHOOK_URL = process.env.SPRING_WEBHOOK_URL;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
 function startTikTokListener() {
+    if (!TIKTOK_TARGET_ACCOUNT) return console.log('⚠️ ТікТок акаунт не вказано.');
+
     console.log(`🎧 Підключення до TikTok: @${TIKTOK_TARGET_ACCOUNT}...`);
-    let tiktokLiveConnection = new WebcastPushConnection(TIKTOK_TARGET_ACCOUNT);
+    let tiktokLiveConnection = new TikTokLiveConnection(TIKTOK_TARGET_ACCOUNT);
 
     tiktokLiveConnection.connect().then(state => {
         console.log(`✅ TikTok: підключено (Кімната ${state.roomId})`);
     }).catch(err => {
-        // Якщо ефіру немає, підключення відхиляється. Пробуємо знову через хвилину.
-        setTimeout(startTikTokListener, 60000); 
-    });
-
-    tiktokLiveConnection.on('streamEnd', () => {
-        console.log('⚪️ TikTok: Ефір завершено!');
-        sendWebhook('TIKTOK', false, '');
         setTimeout(startTikTokListener, 60000);
     });
 
-    tiktokLiveConnection.on('connected', () => {
+    tiktokLiveConnection.on('streamEnd', async () => { // <--- додали async
+        console.log('⚪️ TikTok: Ефір завершено!');
+        await sendWebhook('TIKTOK', false, ''); // <--- додали await
+        setTimeout(startTikTokListener, 60000);
+    });
+
+    tiktokLiveConnection.on('connected', async () => { // <--- додали async
         console.log('🔴 TikTok: ЕФІР АКТИВНИЙ!');
-        sendWebhook('TIKTOK', true, `https://www.tiktok.com/@${TIKTOK_TARGET_ACCOUNT}/live`);
+        await sendWebhook('TIKTOK', true, `https://www.tiktok.com/@${TIKTOK_TARGET_ACCOUNT}/live`); // <--- додали await
     });
 }
 
-// ==========================================
-// 2. YOUTUBE (Легкий HTTP Scraping)
-// ==========================================
 async function checkYouTubeLive() {
+    if (!YOUTUBE_TARGET_ACCOUNT) return;
+
     console.log('▶️ Перевірка YouTube...');
     try {
-        // Ютуб перенаправляє це посилання на активний стрім (якщо він є)
         const ytUrl = `https://www.youtube.com/@${YOUTUBE_TARGET_ACCOUNT}/live`;
         const response = await axios.get(ytUrl);
-
-        // Шукаємо системний маркер прямого ефіру
         const isLive = response.data.includes('"isLiveNow":true');
 
         if (isLive) {
-            // Витягуємо ID відео, щоб передати точне посилання для вашого iframe на сайті
             const videoIdMatch = response.data.match(/"videoId":"(.*?)"/);
             const videoUrl = videoIdMatch ? `https://www.youtube.com/watch?v=${videoIdMatch[1]}` : ytUrl;
-            
             console.log(`🔴 YouTube: ЕФІР АКТИВНИЙ!`);
-            sendWebhook('YOUTUBE', true, videoUrl);
+            await sendWebhook('YOUTUBE', true, videoUrl);
         } else {
             console.log(`⚪️ YouTube: мовчить.`);
-            sendWebhook('YOUTUBE', false, ''); 
+            await sendWebhook('YOUTUBE', false, '');
         }
     } catch (error) {
         console.error('❌ Помилка YouTube перевірки:', error.message);
     }
 }
 
-// ==========================================
-// 3. INSTAGRAM (Важкий Scraping через Puppeteer)
-// ==========================================
 async function checkInstagramLive() {
+    if (!IG_TARGET_ACCOUNT || !process.env.BOT_USERNAME || !process.env.BOT_PASSWORD) {
+        return console.log('⚠️ Дані для Інстаграму не налаштовані.');
+    }
+
     console.log('👁️ Перевірка Instagram...');
-    
-    // Аргументи для стабільної роботи на Linux-серверах
-    const browser = await puppeteer.launch({ 
-        headless: true, 
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH, // <--- Ось це додати
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
+    const browser = await puppeteer.launch({
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH, // Вкрай важливо для Docker
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
     const page = await browser.newPage();
 
     try {
         await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2' });
         await page.waitForSelector('[name="username"]', { timeout: 15000 });
-        
+
         await page.type('[name="username"]', process.env.BOT_USERNAME, { delay: 50 });
         await page.type('[name="password"]', process.env.BOT_PASSWORD, { delay: 50 });
         await page.click('[type="submit"]');
@@ -97,10 +94,10 @@ async function checkInstagramLive() {
 
         if (isLive) {
             console.log(`🔴 Instagram: ЕФІР АКТИВНИЙ!`);
-            sendWebhook('INSTAGRAM', true, currentUrl);
+            await sendWebhook('INSTAGRAM', true, currentUrl); // <--- додали await
         } else {
             console.log(`⚪️ Instagram: мовчить.`);
-            sendWebhook('INSTAGRAM', false, '');
+            await sendWebhook('INSTAGRAM', false, ''); // <--- додали await
         }
     } catch (error) {
         console.error('❌ Помилка Instagram скрапера:', error.message);
@@ -109,30 +106,35 @@ async function checkInstagramLive() {
     }
 }
 
-// ==========================================
-// 4. ВІДПРАВКА ДАНИХ НА ВАШ SPRING BOOT
-// ==========================================
 async function sendWebhook(platform, isActive, url) {
+    if (!SPRING_WEBHOOK_URL) return;
+
     try {
-        await axios.post(SPRING_WEBHOOK_URL, { platform, isActive, url });
+        await axios.post(SPRING_WEBHOOK_URL,
+            { platform, isActive, url },
+            {
+                headers: {
+                    'Authorization': `Bearer ${WEBHOOK_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
         console.log(`📤 Відправлено в Spring: ${platform} -> ${isActive}`);
     } catch (err) {
         console.error(`❌ Помилка зв'язку зі Spring сервером:`, err.message);
     }
 }
 
-// ==========================================
-// ЗАПУСК УСІХ МОДУЛІВ
-// ==========================================
-console.log('🚀 Радар Antique Life запущено!');
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Сервер запущено на порту ${PORT}`);
+    console.log('📡 Радар Antique Life активовано!');
 
-// ТікТок працює через підключення, запускаємо один раз
-startTikTokListener(); 
+    // Запускаємо слухачів
+    startTikTokListener();
 
-// Ютуб легкий, можна перевіряти кожні 2 хвилини
-setInterval(checkYouTubeLive, 2 * 60 * 1000); 
-checkYouTubeLive(); // Перший запуск одразу
+    setInterval(checkYouTubeLive, 2 * 60 * 1000);
+    checkYouTubeLive().catch(console.error);
 
-// Інстаграм важкий, перевіряємо кожні 3 хвилини
-setInterval(checkInstagramLive, 3 * 60 * 1000); 
-checkInstagramLive(); // Перший запуск одразу
+    setInterval(checkInstagramLive, 3 * 60 * 1000);
+    checkInstagramLive().catch(console.error);
+});
