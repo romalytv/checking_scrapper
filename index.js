@@ -77,9 +77,11 @@ async function checkInstagramLive() {
     });
     const page = await browser.newPage();
 
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36');
+
     try {
-        await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2' });
-        await page.waitForSelector('[name="username"]', { timeout: 15000 });
+        await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForSelector('[name="username"]', { timeout: 30000 });
 
         await page.type('[name="username"]', process.env.BOT_USERNAME, { delay: 50 });
         await page.type('[name="password"]', process.env.BOT_PASSWORD, { delay: 50 });
