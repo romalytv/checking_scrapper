@@ -4,7 +4,7 @@ require('dotenv').config();
 
 const TIKTOK_USERNAME = process.env.TIKTOK_TARGET_ACCOUNT || 'france_antique_centre';
 const BACKEND_URL = process.env.SPRING_WEBHOOK_URL;
-const SECRET_TOKEN = 'antique_super_secret_token_2026';
+const SECRET_TOKEN = process.env.WEBHOOK_SECRET;
 
 console.log(`📡 TikTok Радар активовано для @${TIKTOK_USERNAME}`);
 
