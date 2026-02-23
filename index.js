@@ -21,8 +21,10 @@ function sendToSpring(isActive, url = '') {
 }
 
 function startTikTokListener() {
-    // Переконайся, що TIKTOK_USERNAME не містить символу @
-    let tiktokConnect = new TikTokLiveConnection(TIKTOK_USERNAME);
+    let tiktokConnect = new TikTokLiveConnection(TIKTOK_USERNAME, {
+        sessionId: '5414b79b6d13bb493b704c400870e363',
+        disableEulerFallbacks: true
+    });
 
     tiktokConnect.connect()
         .then(state => {
