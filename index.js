@@ -23,6 +23,7 @@ function sendToSpring(isActive, url = '') {
 function startTikTokListener() {
     let tiktokConnect = new TikTokLiveConnection(TIKTOK_USERNAME, {
         sessionId: '5414b79b6d13bb493b704c400870e363',
+        ttTargetIdc: 'alisg',
         disableEulerFallbacks: true
     });
 
