@@ -21,6 +21,7 @@ function sendToSpring(isActive, url = '') {
 }
 
 function startTikTokListener() {
+    // Переконайся, що TIKTOK_USERNAME не містить символу @
     let tiktokConnect = new TikTokLiveConnection(TIKTOK_USERNAME);
 
     tiktokConnect.connect()
@@ -29,7 +30,11 @@ function startTikTokListener() {
             sendToSpring(true, `https://www.tiktok.com/@${TIKTOK_USERNAME}/live`);
         })
         .catch(err => {
-            setTimeout(startTikTokListener, 60000);
+            // ТУТ КРИЄТЬСЯ ВІДПОВІДЬ:
+            console.error('❌ Помилка підключення:', err.message || err);
+
+            // Якщо це бан по IP, краще почекати довше перед перезапуском
+            setTimeout(startTikTokListener, 120000);
         });
 
     tiktokConnect.on('streamEnd', () => {
@@ -39,7 +44,8 @@ function startTikTokListener() {
     });
 
     tiktokConnect.on('error', (err) => {
-        console.log('⚠️ TikTok Error, перезапуск...');
+        // Додаємо вивід самої помилки
+        console.error('⚠️ Помилка під час ефіру:', err.message || err);
         setTimeout(startTikTokListener, 60000);
     });
 }
