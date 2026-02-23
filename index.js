@@ -44,4 +44,18 @@ function startTikTokListener() {
     });
 }
 
+const http = require('http');
+
+// Створюємо міні-сервер для Render
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('TikTok Radar is running...');
+});
+
+// Render сам підставить порт у змінну оточення PORT
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => {
+    console.log(`✅ Dummy server is listening on port ${PORT}`);
+});
+
 startTikTokListener();
